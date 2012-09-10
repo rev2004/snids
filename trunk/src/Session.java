@@ -8,6 +8,9 @@ public class Session {
 		
 	public ArrayList<Integer> rules_status = new ArrayList<Integer>();
 
+	public boolean fin = false;
+	public double fin_seq_number = 0;
+
 	public Session(String remote_ip, int local_port, int remote_port) {
 		super();
 		this.remote_ip = remote_ip;

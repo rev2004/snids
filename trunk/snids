@@ -1,5 +1,5 @@
 #!/bin/sh
 
 export CLASSPATH=./lib/jpcap.jar:$CLASSPATH
-export LD_LIBRARY_PATH=./lib:$LD_LIBRARY_PATH
+export LD_LIBRARY_PATH=./lib:./lib/jpcap-0.7/src/c:$LD_LIBRARY_PATH
 java -cp "$CLASSPATH:./snids.jar" snids $1 $2

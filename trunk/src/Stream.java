@@ -2,7 +2,7 @@ import java.util.ArrayList;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
-import net.sourceforge.jpcap.net.TCPPacket;
+import jpcap.packet.*;
 
 public class Stream {
 
@@ -13,6 +13,9 @@ public class Stream {
 	
 	ArrayList<TCPPacket> sends = new ArrayList<TCPPacket>();
 	ArrayList<TCPPacket> recvs = new ArrayList<TCPPacket>();
+
+	public boolean fin = false;
+	public double fin_seq_number = 0;
 	
 	public Stream(String remote_ip, int local_port, int remote_port) {
 		super();
@@ -24,7 +27,7 @@ public class Stream {
 	// Add a tcp packet and set current seq num
 	public void addPacket(TCPPacket p) {
 		
-		if(p.getSourceAddress().equalsIgnoreCase(snids.host)) {
+		if(p.src_ip.getHostAddress().equalsIgnoreCase(snids.host)) {
 			sends.add(p);
 		}
 		else {
@@ -51,7 +54,7 @@ public class Stream {
 		do {
 			found = false;
 			for (int i=0; i<sends.size()-1; i++) {
-				if (sends_ordered[i].getSequenceNumber() > sends_ordered[i+1].getSequenceNumber()) {
+				if (sends_ordered[i].sequence > sends_ordered[i+1].sequence) {
 					TCPPacket temp;
 					temp = sends_ordered[i];
 					sends_ordered[i] = sends_ordered[i+1];
@@ -65,7 +68,7 @@ public class Stream {
 		do {
 			found = false;
 			for (int i=0; i<recvs.size()-1; i++) {
-				if (recvs_ordered[i].getSequenceNumber() > recvs_ordered[i+1].getSequenceNumber()) {
+				if (recvs_ordered[i].sequence > recvs_ordered[i+1].sequence) {
 					TCPPacket temp;
 					temp = recvs_ordered[i];
 					recvs_ordered[i] = recvs_ordered[i+1];
@@ -84,10 +87,10 @@ public class Stream {
 		byte[] send_data = null;
 
 		for (int i=0; i<recvs_ordered.length; i++)
-			recv_data = concat(recv_data, recvs_ordered[i].getData());
+			recv_data = concat(recv_data, recvs_ordered[i].data);
 		
 		for (int i=0; i<sends_ordered.length; i++)
-			send_data = concat(send_data, sends_ordered[i].getData());
+			send_data = concat(send_data, sends_ordered[i].data);
 		
 		//System.out.println("");
 		//System.out.println("-- Received -- \n"+new String(recv_data,0));
@@ -128,8 +131,10 @@ public class Stream {
 				String candidateString = new String(send_data,0);
 				Matcher matcher = regex.matcher(candidateString);	
 				while (matcher.find()) {
-					snids.attackFound(r.name);
+					match_2 = true;
 				}
+				if (match_2)
+					snids.attackFound(r.name);
 			}
 			else {
 				boolean match_2 = false;
@@ -137,8 +142,10 @@ public class Stream {
 				String candidateString = new String(recv_data,0);
 				Matcher matcher = regex.matcher(candidateString);	
 				while (matcher.find()) {
-					snids.attackFound(r.name);
+					match_2 = true;
 				}
+				if (match_2)
+					snids.attackFound(r.name);
 			}
 			
 		}
