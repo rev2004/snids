@@ -1,0 +1,9 @@
+host=192.168.0.104
+name=Apacket8matching
+type=protocol
+proto=udp
+local_port=any
+remote_port=53
+ip=any
+send="mail.cs.uic.edu"
+recv="mail.cs.uic.edu"

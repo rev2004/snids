@@ -1,0 +1,7 @@
+host=131.193.40.156
+name=Astream1matching
+type=stream
+local_port=any
+remote_port=80
+ip=any
+send="GET /~i491/.*Home_files"

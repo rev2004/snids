@@ -1,0 +1,7 @@
+host=192.168.0.104
+name=Astream8matching
+type=stream
+local_port=any
+remote_port=25
+ip=any
+send="MAIL FROM.*RCPT TO"

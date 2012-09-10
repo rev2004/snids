@@ -1,0 +1,8 @@
+host=192.168.0.104
+name=Apacket6matching
+type=protocol
+proto=tcp
+local_port=any
+remote_port=22
+ip=any
+recv="FreeBSD-20020702"
