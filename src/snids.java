@@ -7,13 +7,8 @@ import java.util.Scanner;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
-import net.sourceforge.jpcap.capture.CaptureFileOpenException;
-import net.sourceforge.jpcap.capture.CapturePacketException;
-import net.sourceforge.jpcap.capture.PacketCapture;
-import net.sourceforge.jpcap.capture.PacketListener;
-import net.sourceforge.jpcap.net.Packet;
-import net.sourceforge.jpcap.net.TCPPacket;
-import net.sourceforge.jpcap.net.UDPPacket;
+import jpcap.*;
+import jpcap.packet.*;
 
 public class snids  {
 	
@@ -34,45 +29,26 @@ public class snids  {
 	}
 
 	public void run() throws Exception {
-		
+
 		//parse rules.txt
 		parseRules(rules_filename);
 
-		try {
-			PacketCapture packetCapture = new PacketCapture();
+		//open a file to read saved packets
+		JpcapCaptor captor=JpcapCaptor.openFile(pcap_filename);
+		
+		IDSListener filter = new IDSListener();
 
-			packetCapture.openOffline(pcap_filename);
+		while(true){
 
-			packetCapture.addPacketListener(new IDSListener());
+			//read a packet from the opened file
+			Packet packet=captor.getPacket();
+
+			//if some error occurred or EOF has reached, break the loop
+			if(packet==null || packet==Packet.EOF) break;
+
+			filter.receivePacket(packet);
 			
-			packetCapture.capture(-1);
-
-		} catch (CaptureFileOpenException e) {
-			e.printStackTrace();
 		}
-		catch (CapturePacketException e2) {
-			return;
-		}
-
-//		// JPCAP
-//				//open a file to read saved packets
-//		JpcapCaptor captor=JpcapCaptor.openFile(pcap_filename);
-//
-//		while(true){
-//			//read a packet from the opened file
-//			Packet packet=captor.getPacket();
-//			//if some error occurred or EOF has reached, break the loop
-//			if(packet==null || packet==Packet.EOF) break;
-//
-//			filterPacket(packet);	
-//			
-//		}
-//		
-//		
-////		for (Rule r : rules)
-////			r.print();
-//			
-//		captor.close();
 		
 	}
 	
@@ -97,24 +73,27 @@ public class snids  {
 		int type = 0, SRC=0, DEST = 1; // 0 we are src, 1 we are dest
 		
 		// Set locale and remote info
-		if (p.getSourceAddress().equalsIgnoreCase(host)) {
+		if (p.src_ip.getHostAddress().equalsIgnoreCase(host)) {
 			type = SRC;
-			remote_ip = p.getDestinationAddress();
-			remote_port = p.getDestinationPort();
-			local_port = p.getSourcePort();
+			remote_ip = p.dst_ip.getHostAddress();
+			remote_port = p.dst_port;
+			local_port = p.src_port;
 		}
-		else  if (p.getDestinationAddress().equalsIgnoreCase(host)) {
+		else  if (p.dst_ip.getHostAddress().equalsIgnoreCase(host)) {
 			type = DEST;
-			remote_ip = p.getSourceAddress();
-			remote_port = p.getSourcePort();
-			local_port = p.getDestinationPort();
+			remote_ip = p.src_ip.getHostAddress();
+			remote_port = p.src_port;
+			local_port = p.dst_port;
 		}
 		else
 			return; // TODO
+
+		if (p.ack && p.data.length==0)
+			return;
 		
 		/** GET STREAM OR CREATE **/
-		boolean start_stream = (p.isSyn() && !p.isAck());
-		boolean delete_stream = p.isFin();
+		boolean start_stream = (p.syn && !p.ack);
+		boolean delete_stream = p.fin || p.rst;
 		Stream stream = null;
 		if (!start_stream) {
 			for (Stream s: streams) {
@@ -139,24 +118,32 @@ public class snids  {
 		if (stream!=null) {
 			
 			// Delete 
-//			if (type == DEST)
-//				for (TCPPacket packet : stream.recvs) {
-//					if(packet.getSequenceNumber() == p.getSequenceNumber())
-//						return;
-//				}
-//			if (type == SRC)
-//				for (TCPPacket packet : stream.sends) {
-//					if(packet.getSequenceNumber() == p.getSequenceNumber())
-//						return;
-//				}
+			if (type == DEST)
+				for (TCPPacket packet : stream.recvs) {
+					if(packet.sequence == p.sequence)
+						return;
+				}
+			if (type == SRC)
+				for (TCPPacket packet : stream.sends) {
+					if(packet.sequence == p.sequence)
+						return;
+				}
 
 //			System.out.println(stream);
 
+			if ( stream.fin && p.sequence > stream.fin_seq_number )
+				return;
+
 			stream.addPacket(p);
 
-			if (p.isFin()) {
+			if (p.rst) {
 				stream.searchAttacks();
 				streams.remove(stream);
+			}
+
+			if (p.fin) {
+				stream.fin = true;
+				stream.fin_seq_number = p.sequence;
 			}
 		}
 		
@@ -170,21 +157,23 @@ public class snids  {
 		int type = 0, SRC=0, DEST = 1; // 0 we are src, 1 we are dest
 		
 		// Set locale and remote info
-		if (p.getSourceAddress().equalsIgnoreCase(host)) {
+		if (p.src_ip.getHostAddress().equalsIgnoreCase(host)) {
 			type = SRC;
-			remote_ip = p.getDestinationAddress();
-			remote_port = p.getDestinationPort();
-			local_port = p.getSourcePort();
+			remote_ip = p.dst_ip.getHostAddress();
+			remote_port = p.dst_port;
+			local_port = p.src_port;
 		}
-		else  if (p.getDestinationAddress().equalsIgnoreCase(host)) {
+		else  if (p.dst_ip.getHostAddress().equalsIgnoreCase(host)) {
 			type = DEST;
-			remote_ip = p.getSourceAddress();
-			remote_port = p.getSourcePort();
-			local_port = p.getDestinationPort();
+			remote_ip = p.src_ip.getHostAddress();
+			remote_port = p.src_port;
+			local_port = p.dst_port;
 		}
 		else
 			return; // TODO
 		
+		if (p.ack && p.data.length==0)
+			return;
 
 		/** Check the sessions **/
 		boolean new_session = true;
@@ -196,13 +185,21 @@ public class snids  {
 					&& ses.local_port == local_port) {
 				new_session = false;
 				s = ses;
-				if (p.isFin())
+				if (p.rst)
 					delete_session = true;
 			}
 		}
 		if (new_session) {
 			s = new Session(remote_ip, local_port, remote_port);
 			sessions.add(s);
+		}
+
+		if ( s.fin && p.sequence > s.fin_seq_number )
+			return;
+
+		if (p.fin) {
+			s.fin = true;
+			s.fin_seq_number = p.sequence;
 		}
 
 		// Check for every rule
@@ -218,21 +215,21 @@ public class snids  {
 			// check ip
 			if (!r.ip.equalsIgnoreCase("any")) {
 				// if we are dest, check src ip
-				if (type == DEST && !p.getSourceAddress().equalsIgnoreCase(r.ip)) {
+				if (type == DEST && !p.src_ip.getHostAddress().equalsIgnoreCase(r.ip)) {
 					match = false;
 				}
 			}
 
 			// Check remote port
 			if (!r.remote_port.equalsIgnoreCase("any")) {
-				if (type == DEST && p.getSourcePort() != Integer.parseInt(r.remote_port))
+				if (type == DEST && p.src_port != Integer.parseInt(r.remote_port))
 					match = false;
 			}
 
 			
 			// Check local port
 			if (!r.local_port.equalsIgnoreCase("any")) {
-				if (type == DEST && p.getDestinationPort() != Integer.parseInt(r.local_port))
+				if (type == DEST && p.dst_port != Integer.parseInt(r.local_port))
 					match = false;
 			}
 
@@ -245,7 +242,7 @@ public class snids  {
 				if (r.patterns_types.get(index).equals("send")) {
 					boolean match_send = false;
 					Pattern regex = Pattern.compile(r.patterns.get(index), Pattern.DOTALL);
-					String candidateString = new String(p.getData(),0);
+					String candidateString = new String(p.data,0);
 //System.out.println("Candidate string in send: "+candidateString);
 					Matcher matcher = regex.matcher(candidateString);	
 					while (matcher.find()) {
@@ -254,12 +251,12 @@ public class snids  {
 					}
 					// Check flag
 					Flags flags = r.flags.get(index);
-					if ((flags.A && !p.isAck())) match_send = false; 
-					if ((flags.F && !p.isFin())) match_send = false; 
-					if ((flags.S && !p.isSyn())) match_send = false; 
-					if ((flags.P && !p.isPsh())) match_send = false; 
-					if ((flags.R && !p.isRst())) match_send = false; 
-					if ((flags.U && !p.isUrg())) match_send = false; 
+					if ((flags.A && !p.ack)) match_send = false; 
+					if ((flags.F && !p.fin)) match_send = false; 
+					if ((flags.S && !p.syn)) match_send = false; 
+					if ((flags.P && !p.psh)) match_send = false; 
+					if ((flags.R && !p.rst)) match_send = false; 
+					if ((flags.U && !p.urg)) match_send = false; 
 					if (match_send) {
 						index++;
 						s.rules_status.set(i,index);
@@ -268,13 +265,16 @@ public class snids  {
 							s.rules_status.set(i,0);
 						}
 					}
+					else if (!match_send && p.data.length > 0){
+						s.rules_status.set(i,0);	
+					}
 				}
 			}
 			else {
 				if (rules.get(i).patterns_types.get(index).equals("recv")) {
 					boolean match_recv = false;
 					Pattern regex = Pattern.compile(r.patterns.get(index), Pattern.DOTALL);
-					String candidateString = new String(p.getData(),0);
+					String candidateString = new String(p.data,0);
 //System.out.println("Candidate string in recv: "+candidateString);
 					Matcher matcher = regex.matcher(candidateString);	
 					while (matcher.find()) {
@@ -282,12 +282,12 @@ public class snids  {
 					}
 					// Check flag
 					Flags flags = r.flags.get(index);
-					if ((flags.A && !p.isAck())) match_recv = false; 
-					if ((flags.F && !p.isFin())) match_recv = false; 
-					if ((flags.S && !p.isSyn())) match_recv = false; 
-					if ((flags.P && !p.isPsh())) match_recv = false; 
-					if ((flags.R && !p.isRst())) match_recv = false; 
-					if ((flags.U && !p.isUrg())) match_recv = false; 
+					if ((flags.A && !p.ack)) match_recv = false; 
+					if ((flags.F && !p.fin)) match_recv = false; 
+					if ((flags.S && !p.syn)) match_recv = false; 
+					if ((flags.P && !p.psh)) match_recv = false; 
+					if ((flags.R && !p.rst)) match_recv = false; 
+					if ((flags.U && !p.urg)) match_recv = false; 
 					if (match_recv) {
 						index++;
 						s.rules_status.set(i,index);
@@ -296,13 +296,16 @@ public class snids  {
 							s.rules_status.set(i,0);
 						}
 					}
+					else if (!match_recv && p.data.length > 0){
+						s.rules_status.set(i,0);	
+					}
 				}
 			}
 			/******** END SESSION ********/
 
 		}
 				
-		// If FIN, delete session
+		// If RST, delete session
 		if (delete_session)
 			sessions.remove(s);
 		
@@ -318,17 +321,17 @@ public class snids  {
 		int type = 0, SRC=0, DEST = 1; // 0 we are src, 1 we are dest
 		
 		// Set locale and remote info
-		if (p.getSourceAddress().equalsIgnoreCase(host)) {
+		if (p.src_ip.getHostAddress().equalsIgnoreCase(host)) {
 			type = SRC;
-			remote_ip = p.getDestinationAddress();
-			remote_port = p.getDestinationPort();
-			local_port = p.getSourcePort();
+			remote_ip = p.dst_ip.getHostAddress();
+			remote_port = p.dst_port;
+			local_port = p.src_port;
 		}
-		else  if (p.getDestinationAddress().equalsIgnoreCase(host)) {
+		else  if (p.dst_ip.getHostAddress().equalsIgnoreCase(host)) {
 			type = DEST;
-			remote_ip = p.getSourceAddress();
-			remote_port = p.getSourcePort();
-			local_port = p.getDestinationPort();
+			remote_ip = p.src_ip.getHostAddress();
+			remote_port = p.src_port;
+			local_port = p.dst_port;
 		}
 		else
 			return; // TODO
@@ -362,21 +365,21 @@ public class snids  {
 			// check ip
 			if (!r.ip.equalsIgnoreCase("any")) {
 				// if we are dest, check src ip
-				if (type == DEST && !p.getSourceAddress().equalsIgnoreCase(r.ip)) {
+				if (type == DEST && !p.src_ip.getHostAddress().equalsIgnoreCase(r.ip)) {
 					match = false;
 				}
 			}
 
 			// Check remote port
 			if (!r.remote_port.equalsIgnoreCase("any")) {
-				if (type == DEST && p.getSourcePort() != Integer.parseInt(r.remote_port))
+				if (type == DEST && p.src_port != Integer.parseInt(r.remote_port))
 					match = false;
 			}
 
 			
 			// Check local port
 			if (!r.local_port.equalsIgnoreCase("any")) {
-				if (type == DEST && p.getDestinationPort() != Integer.parseInt(r.local_port))
+				if (type == DEST && p.dst_port != Integer.parseInt(r.local_port))
 					match = false;
 			}
 
@@ -389,7 +392,7 @@ public class snids  {
 				if (r.patterns_types.get(index).equals("send")) {
 					boolean match_send = false;
 					Pattern regex = Pattern.compile(r.patterns.get(index), Pattern.DOTALL);
-					String candidateString = new String(p.getData(),0);
+					String candidateString = new String(p.data,0);
 //System.out.println("Candidate string in send: "+candidateString);
 					Matcher matcher = regex.matcher(candidateString);	
 					while (matcher.find()) {
@@ -403,13 +406,16 @@ public class snids  {
 							s.rules_status.set(i,0);
 						}
 					}
+					else if (!match_send && p.data.length > 0){
+						s.rules_status.set(i,0);	
+					}
 				}
 			}
 			else {
 				if (rules.get(i).patterns_types.get(index).equals("recv")) {
 					boolean match_recv = false;
 					Pattern regex = Pattern.compile(r.patterns.get(index), Pattern.DOTALL);
-					String candidateString = new String(p.getData(),0);
+					String candidateString = new String(p.data,0);
 					Matcher matcher = regex.matcher(candidateString);	
 //System.out.println("Candidate string in recv: "+candidateString);
 					while (matcher.find()) {
@@ -422,6 +428,9 @@ public class snids  {
 							attackFound(r.name);
 							s.rules_status.set(i,0);
 						}
+					}
+					else if (!match_recv && p.data.length > 0){
+						s.rules_status.set(i,0);	
 					}
 				}
 			}
@@ -551,6 +560,7 @@ public class snids  {
 		}
 		try {
 			snids s = new snids(args[0],args[1]);
+			System.err.close();
 			s.run();
 			for (Stream stream: streams)
 				stream.searchAttacks();
@@ -560,10 +570,10 @@ public class snids  {
 		}
 	}
 	
-	public class IDSListener implements PacketListener{
+	public class IDSListener implements PacketReceiver{
 
 		@Override
-		public void packetArrived(net.sourceforge.jpcap.net.Packet packet) {
+		public void receivePacket(Packet packet) {
 			// Launch filters
 			filterPacket(packet);
 		}

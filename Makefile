@@ -1,5 +1,4 @@
-
-JFLAGS = -g -Xlint -cp .:./src:./lib/jpcap.jar -d ./
+JFLAGS = -g -Xlint -cp .:./src:./lib/jpcap-0.7/lib/jpcap.jar -d ./
 JC = javac 
 
 .SUFFIXES: .java .class
