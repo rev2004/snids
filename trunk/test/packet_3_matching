@@ -1,0 +1,11 @@
+host=131.193.40.156
+name=Apacket3matching
+type=protocol
+proto=tcp
+local_port=any
+remote_port=110
+ip=any
+recv="\+OK.*\r\n"
+send="USER .*\r\n"
+recv="\+OK.*"
+send="PASS.*\r\n"

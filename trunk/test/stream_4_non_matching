@@ -1,0 +1,7 @@
+host=131.193.40.156
+name=Bstream4nonmatching
+type=stream
+local_port=any
+remote_port=110
+ip=any
+send="USER.*PASS"

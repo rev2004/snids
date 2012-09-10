@@ -1,0 +1,8 @@
+host=131.193.32.31
+name=Apacket5matching
+type=protocol
+proto=tcp
+local_port=any
+remote_port=any
+ip=any
+recv=".*" with flags=FUP

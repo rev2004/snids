@@ -1,0 +1,7 @@
+host=131.193.40.156
+name=Astream5matching
+type=stream
+local_port=any
+remote_port=110
+ip=any
+recv="ERR.*Pop server"

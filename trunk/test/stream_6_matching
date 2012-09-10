@@ -1,0 +1,7 @@
+host=192.168.83.130
+name=Astream6matching
+type=stream
+local_port=any
+remote_port=80
+ip=any
+recv="HTTP/1.1 200 OK.*font-family"
